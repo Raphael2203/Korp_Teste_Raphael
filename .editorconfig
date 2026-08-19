@@ -1,0 +1,62 @@
+# Convenções de código do backend (.NET).
+# Usadas por `dotnet format` e pelos analisadores da IDE.
+#
+# O frontend tem o seu próprio .editorconfig em frontend/korp-web/,
+# marcado com root = true, então não é afetado por este arquivo.
+
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+# end_of_line é deliberadamente omitido: o repositório é editado no Windows e o
+# CI roda em Linux. A normalização fica a cargo do .gitattributes.
+
+[*.{cs,csx}]
+indent_size = 4
+
+# As migrations são geradas pelo EF Core — não devem ser reformatadas à mão.
+[**/Migrations/*.cs]
+generated_code = true
+
+# Organização de usings
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:warning
+
+# Preferências de linguagem
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_for_built_in_types = false:silent
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:silent
+csharp_prefer_braces = when_multiline:silent
+dotnet_style_prefer_collection_expression = true:suggestion
+
+# Qualidade
+dotnet_style_readonly_field = true:warning
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+
+# Nomenclatura: campos privados com prefixo _
+dotnet_naming_rule.private_fields_underscore.severity = suggestion
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel_case
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.md]
+max_line_length = off
+trim_trailing_whitespace = false
+
+[*.sql]
+indent_size = 2

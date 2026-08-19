@@ -1,17 +1,45 @@
 .container {
-  max-width: 900px;
-  margin: 40px auto;
-  padding: 20px;
+  max-width: 1000px;
+  margin: 32px auto;
+  padding: 0 20px 48px;
+}
+
+.page-header h1 {
+  margin: 0 0 4px;
+}
+
+.page-header p {
+  margin: 0 0 24px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.form-card {
+  margin-bottom: 24px;
 }
 
 form {
   display: flex;
   gap: 16px;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
-  margin-bottom: 40px;
+  padding-top: 8px;
+}
+
+.description-field {
+  flex: 1 1 320px;
 }
 
 table {
   width: 100%;
+}
+
+.numeric {
+  text-align: right;
+}
+
+.state {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+  color: var(--mat-sys-on-surface-variant);
 }

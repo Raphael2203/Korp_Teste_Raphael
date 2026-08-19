@@ -1,99 +1,117 @@
 <div class="container">
+  <header class="page-header">
+    <h1>Produtos</h1>
+    <p>Cadastre os produtos que poderão ser utilizados nas notas fiscais.</p>
+  </header>
 
-  <h1>Produtos</h1>
+  <mat-card class="form-card">
+    <mat-card-header>
+      <mat-card-title>Novo produto</mat-card-title>
+    </mat-card-header>
 
-  <form (ngSubmit)="createProduct()">
+    <mat-card-content>
+      <form [formGroup]="form" (ngSubmit)="createProduct()">
+        <mat-form-field appearance="outline">
+          <mat-label>Código</mat-label>
 
-    <mat-form-field appearance="outline">
-      <mat-label>Código</mat-label>
+          <input matInput formControlName="code" maxlength="50" required />
 
-      <input
-        matInput
-        name="code"
-        [(ngModel)]="newProduct.code"
-        required>
-    </mat-form-field>
+          @if (form.controls.code.hasError('required') && form.controls.code.touched) {
+            <mat-error>O código é obrigatório.</mat-error>
+          }
+        </mat-form-field>
 
-    <mat-form-field appearance="outline">
-      <mat-label>Descrição</mat-label>
+        <mat-form-field appearance="outline" class="description-field">
+          <mat-label>Descrição</mat-label>
 
-      <input
-        matInput
-        name="description"
-        [(ngModel)]="newProduct.description"
-        required>
-    </mat-form-field>
+          <input matInput formControlName="description" maxlength="200" required />
 
-    <mat-form-field appearance="outline">
-      <mat-label>Saldo</mat-label>
+          @if (suggesting()) {
+            <mat-spinner matSuffix diameter="20"></mat-spinner>
+          } @else {
+            <button
+              mat-icon-button
+              matSuffix
+              type="button"
+              matTooltip="Sugerir descrição com IA"
+              aria-label="Sugerir descrição com IA"
+              (click)="suggestDescription()"
+            >
+              <mat-icon>auto_awesome</mat-icon>
+            </button>
+          }
 
-      <input
-        matInput
-        type="number"
-        name="stock"
-        [(ngModel)]="newProduct.stock"
-        min="0"
-        required>
-    </mat-form-field>
+          @if (
+            form.controls.description.hasError('required') && form.controls.description.touched
+          ) {
+            <mat-error>A descrição é obrigatória.</mat-error>
+          }
+        </mat-form-field>
 
-    <button
-      mat-flat-button
-      type="submit">
-      Cadastrar
-    </button>
+        <mat-form-field appearance="outline">
+          <mat-label>Saldo</mat-label>
 
-  </form>
+          <input matInput type="number" formControlName="stock" min="0" required />
 
+          @if (form.controls.stock.hasError('min') && form.controls.stock.touched) {
+            <mat-error>O saldo não pode ser negativo.</mat-error>
+          }
+        </mat-form-field>
 
-  <h2>Produtos cadastrados</h2>
+        <button mat-flat-button type="submit" [disabled]="saving()">
+          @if (saving()) {
+            <mat-spinner diameter="20"></mat-spinner>
+          } @else {
+            Cadastrar
+          }
+        </button>
+      </form>
+    </mat-card-content>
+  </mat-card>
 
-  <table
-    mat-table
-    [dataSource]="products">
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Produtos cadastrados</mat-card-title>
+    </mat-card-header>
 
-    <ng-container matColumnDef="code">
-      <th mat-header-cell *matHeaderCellDef>
-        Código
-      </th>
+    <mat-card-content>
+      @if (loading()) {
+        <div class="state">
+          <mat-spinner diameter="36"></mat-spinner>
+        </div>
+      } @else if (products().length === 0) {
+        <p class="state">Nenhum produto cadastrado ainda.</p>
+      } @else {
+        <table mat-table [dataSource]="products()">
+          <ng-container matColumnDef="code">
+            <th mat-header-cell *matHeaderCellDef>Código</th>
 
-      <td mat-cell *matCellDef="let product">
-        {{ product.code }}
-      </td>
-    </ng-container>
+            <td mat-cell *matCellDef="let product">
+              {{ product.code }}
+            </td>
+          </ng-container>
 
+          <ng-container matColumnDef="description">
+            <th mat-header-cell *matHeaderCellDef>Descrição</th>
 
-    <ng-container matColumnDef="description">
-      <th mat-header-cell *matHeaderCellDef>
-        Descrição
-      </th>
+            <td mat-cell *matCellDef="let product">
+              {{ product.description }}
+            </td>
+          </ng-container>
 
-      <td mat-cell *matCellDef="let product">
-        {{ product.description }}
-      </td>
-    </ng-container>
+          <ng-container matColumnDef="stock">
+            <th mat-header-cell *matHeaderCellDef class="numeric">Saldo</th>
 
+            <td mat-cell *matCellDef="let product" class="numeric">
+              {{ product.stock }}
+            </td>
+          </ng-container>
 
-    <ng-container matColumnDef="stock">
-      <th mat-header-cell *matHeaderCellDef>
-        Saldo
-      </th>
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
 
-      <td mat-cell *matCellDef="let product">
-        {{ product.stock }}
-      </td>
-    </ng-container>
-
-
-    <tr
-      mat-header-row
-      *matHeaderRowDef="displayedColumns">
-    </tr>
-
-    <tr
-      mat-row
-      *matRowDef="let row; columns: displayedColumns;">
-    </tr>
-
-  </table>
-
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+      }
+    </mat-card-content>
+  </mat-card>
 </div>

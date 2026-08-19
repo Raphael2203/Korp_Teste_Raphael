@@ -1,0 +1,126 @@
+<div class="container">
+  <header class="page-header">
+    <h1>Nova nota fiscal</h1>
+    <p>Adicione um ou mais produtos. A nota será criada com status <strong>Aberta</strong>.</p>
+  </header>
+
+  <mat-card class="form-card">
+    <mat-card-header>
+      <mat-card-title>Adicionar produto</mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (loadingProducts()) {
+        <div class="state">
+          <mat-spinner diameter="36"></mat-spinner>
+        </div>
+      } @else if (products().length === 0) {
+        <p class="state">Nenhum produto cadastrado. Cadastre um produto antes de emitir a nota.</p>
+      } @else {
+        <form [formGroup]="itemForm" (ngSubmit)="addItem()">
+          <mat-form-field appearance="outline" class="product-field">
+            <mat-label>Produto</mat-label>
+
+            <mat-select formControlName="productId" required>
+              @for (product of availableProducts(); track product.id) {
+                <mat-option [value]="product.id">
+                  {{ product.code }} — {{ product.description }} (saldo: {{ product.stock }})
+                </mat-option>
+              }
+            </mat-select>
+
+            @if (
+              itemForm.controls.productId.hasError('min') && itemForm.controls.productId.touched
+            ) {
+              <mat-error>Selecione um produto.</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="quantity-field">
+            <mat-label>Quantidade</mat-label>
+
+            <input matInput type="number" formControlName="quantity" min="1" required />
+
+            @if (itemForm.controls.quantity.hasError('min') && itemForm.controls.quantity.touched) {
+              <mat-error>A quantidade deve ser maior que zero.</mat-error>
+            }
+          </mat-form-field>
+
+          <button mat-stroked-button type="submit">
+            <mat-icon>add</mat-icon>
+            Adicionar
+          </button>
+        </form>
+      }
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Itens da nota</mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (addedItems().length === 0) {
+        <p class="state">Nenhum item adicionado.</p>
+      } @else {
+        <table mat-table [dataSource]="addedItems()">
+          <ng-container matColumnDef="code">
+            <th mat-header-cell *matHeaderCellDef>Código</th>
+            <td mat-cell *matCellDef="let item">
+              {{ item.getRawValue().code }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="description">
+            <th mat-header-cell *matHeaderCellDef>Descrição</th>
+            <td mat-cell *matCellDef="let item">
+              {{ item.getRawValue().description }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="quantity">
+            <th mat-header-cell *matHeaderCellDef class="numeric">Quantidade</th>
+            <td mat-cell *matCellDef="let item" class="numeric">
+              {{ item.getRawValue().quantity }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef class="numeric">Ações</th>
+            <td mat-cell *matCellDef="let item; let i = index" class="numeric">
+              <button
+                mat-icon-button
+                type="button"
+                aria-label="Remover item"
+                (click)="removeItem(i)"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+      }
+    </mat-card-content>
+
+    <mat-card-actions align="end">
+      <button mat-button type="button" (click)="cancel()">Cancelar</button>
+
+      <button
+        mat-flat-button
+        type="button"
+        [disabled]="saving() || addedItems().length === 0"
+        (click)="save()"
+      >
+        @if (saving()) {
+          <mat-spinner diameter="20"></mat-spinner>
+        } @else {
+          Salvar nota
+        }
+      </button>
+    </mat-card-actions>
+  </mat-card>
+</div>

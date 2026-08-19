@@ -1,0 +1,81 @@
+name: korp
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: korp-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Cria korp_inventory e korp_billing na primeira subida do volume.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  inventory-service:
+    build:
+      context: ./services/InventoryService
+    container_name: korp-inventory
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__InventoryDatabase: "Host=postgres;Port=5432;Database=korp_inventory;Username=postgres;Password=postgres"
+      Database__AutoMigrate: "true"
+      Cors__AllowedOrigins__0: "http://localhost:4200"
+      # Opcional: habilita a sugestão de descrição por IA.
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+    ports:
+      - "5159:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  billing-service:
+    build:
+      context: ./services/BillingService
+    container_name: korp-billing
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__BillingDatabase: "Host=postgres;Port=5432;Database=korp_billing;Username=postgres;Password=postgres"
+      Database__AutoMigrate: "true"
+      Services__InventoryUrl: "http://inventory-service:8080"
+      Cors__AllowedOrigins__0: "http://localhost:4200"
+    ports:
+      - "5160:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend/korp-web
+    container_name: korp-frontend
+    depends_on:
+      inventory-service:
+        condition: service_started
+      billing-service:
+        condition: service_started
+    ports:
+      - "4200:80"
+
+volumes:
+  postgres-data:

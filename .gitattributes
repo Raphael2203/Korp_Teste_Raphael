@@ -1,0 +1,19 @@
+# Normaliza as quebras de linha: o repositório é editado no Windows e o CI roda
+# em Linux. Sem isso, verificações de formatação divergem entre os dois.
+* text=auto eol=lf
+
+# Arquivos que precisam manter CRLF no Windows
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binários
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.tar.gz binary

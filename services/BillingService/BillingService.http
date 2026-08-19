@@ -1,0 +1,27 @@
+@BillingService_HostAddress = http://localhost:5160
+
+### Health check
+GET {{BillingService_HostAddress}}/health
+
+### Listar notas fiscais
+GET {{BillingService_HostAddress}}/api/Invoices
+Accept: application/json
+
+### Consultar uma nota
+GET {{BillingService_HostAddress}}/api/Invoices/1
+Accept: application/json
+
+### Criar nota fiscal (nasce Aberta, com numeração sequencial)
+POST {{BillingService_HostAddress}}/api/Invoices
+Content-Type: application/json
+
+{
+  "items": [
+    { "productId": 1, "quantity": 2 }
+  ]
+}
+
+### Imprimir a nota: baixa o estoque e fecha a nota
+# 409 se a nota já estiver Fechada ou se faltar saldo.
+# 503 se o serviço de estoque estiver indisponível (a nota permanece Aberta).
+POST {{BillingService_HostAddress}}/api/Invoices/1/print

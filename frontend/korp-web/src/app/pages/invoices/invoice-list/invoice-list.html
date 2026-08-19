@@ -1,0 +1,106 @@
+@if (printingId() !== null) {
+  <div class="loading-overlay">
+    <div class="loading-box">
+      <mat-spinner diameter="48"></mat-spinner>
+
+      <h2>Processando impressão...</h2>
+
+      <p>
+        Atualizando o estoque e fechando a nota fiscal.
+      </p>
+    </div>
+  </div>
+}
+
+<div class="container">
+  <header class="page-header">
+    <div>
+      <h1>Notas fiscais</h1>
+      <p>Notas abertas podem ser impressas; a impressão baixa o estoque e fecha a nota.</p>
+    </div>
+
+    <div class="header-actions">
+      <button mat-stroked-button type="button" (click)="loadInvoices()">
+        <mat-icon>refresh</mat-icon>
+        Atualizar
+      </button>
+
+      <a mat-flat-button routerLink="/invoices/new">
+        <mat-icon>add</mat-icon>
+        Nova nota
+      </a>
+    </div>
+  </header>
+
+  <mat-card>
+    <mat-card-content>
+      @if (loading()) {
+        <div class="state">
+          <mat-spinner diameter="36"></mat-spinner>
+        </div>
+      } @else if (invoices().length === 0) {
+        <p class="state">Nenhuma nota fiscal emitida ainda.</p>
+      } @else {
+        <table mat-table [dataSource]="invoices()">
+          <ng-container matColumnDef="number">
+            <th mat-header-cell *matHeaderCellDef>Número</th>
+            <td mat-cell *matCellDef="let invoice">
+              {{ invoice.number }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let invoice">
+              <mat-chip
+                [class.chip-open]="invoice.status === 'Open'"
+                [class.chip-closed]="invoice.status === 'Closed'"
+              >
+                {{ translateStatus(invoice) }}
+              </mat-chip>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="createdAt">
+            <th mat-header-cell *matHeaderCellDef>Emissão</th>
+            <td mat-cell *matCellDef="let invoice">
+              {{ invoice.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="items">
+            <th mat-header-cell *matHeaderCellDef class="numeric">Itens</th>
+            <td mat-cell *matCellDef="let invoice" class="numeric">
+              {{ invoice.items.length }} produto(s) / {{ totalItems(invoice) }} un.
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef class="numeric">Ações</th>
+            <td mat-cell *matCellDef="let invoice" class="numeric">
+              @if (printingId() === invoice.id) {
+                <span class="printing">
+                  <mat-spinner diameter="20"></mat-spinner>
+                  Processando…
+                </span>
+              } @else {
+                <button
+                  mat-flat-button
+                  type="button"
+                  [disabled]="invoice.status !== 'Open' || printingId() !== null"
+                  (click)="print(invoice)"
+                >
+                  <mat-icon>print</mat-icon>
+                  Imprimir
+                </button>
+              }
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

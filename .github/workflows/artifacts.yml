@@ -1,0 +1,234 @@
+name: Artefatos de Deploy
+
+# Empacota tudo o que é necessário para subir o sistema em um servidor:
+# binários publicados dos dois microsserviços, scripts SQL das migrations,
+# build estático do frontend, imagens Docker e os arquivos de infraestrutura.
+#
+# Os artefatos ficam disponíveis para download na própria execução do workflow.
+# NADA é publicado em registry, servidor ou nuvem — a publicação será um passo
+# futuro e deliberado.
+
+on:
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: 'Versão dos artefatos (ex.: 1.0.0)'
+        required: false
+        default: 'dev'
+      incluir_imagens_docker:
+        description: 'Empacotar também as imagens Docker (arquivos grandes)'
+        type: boolean
+        required: false
+        default: true
+  push:
+    tags: [ 'v*' ]
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  NODE_VERSION: '24.x'
+  RETENCAO_DIAS: 30
+
+jobs:
+  versao:
+    name: Definir versão
+    runs-on: ubuntu-latest
+    outputs:
+      valor: ${{ steps.definir.outputs.valor }}
+    steps:
+      - id: definir
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "valor=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "valor=${{ inputs.versao || 'dev' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  backend:
+    name: Binários — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: versao
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [ InventoryService, BillingService ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # Publicação dependente de framework: o servidor precisa apenas do
+      # ASP.NET Core Runtime 9 instalado. É a saída usada tanto por deploy
+      # direto quanto pela imagem Docker.
+      - name: Publicar
+        run: >
+          dotnet publish services/${{ matrix.service }}
+          --configuration Release
+          --output publish/${{ matrix.service }}
+          /p:UseAppHost=false
+
+      - name: Enviar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}-${{ needs.versao.outputs.valor }}
+          path: publish/${{ matrix.service }}
+          retention-days: ${{ env.RETENCAO_DIAS }}
+
+  migrations:
+    name: Scripts SQL das migrations
+    runs-on: ubuntu-latest
+    needs: versao
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Instalar dotnet-ef
+        run: dotnet tool install --global dotnet-ef
+
+      # --idempotent gera um SQL que pode ser executado quantas vezes for
+      # necessário: ele aplica apenas as migrations que ainda faltam. É o
+      # formato adequado para rodar em um banco de servidor, onde não se quer
+      # depender do SDK do .NET nem aplicar migrations pela aplicação.
+      - name: Gerar scripts
+        run: |
+          mkdir -p artefatos/migrations
+          dotnet ef migrations script --idempotent \
+            --project services/InventoryService \
+            --output artefatos/migrations/korp_inventory.sql
+          dotnet ef migrations script --idempotent \
+            --project services/BillingService \
+            --output artefatos/migrations/korp_billing.sql
+          cp db/init/01-create-databases.sql artefatos/migrations/00-create-databases.sql
+
+      - name: Enviar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: migrations-${{ needs.versao.outputs.valor }}
+          path: artefatos/migrations
+          retention-days: ${{ env.RETENCAO_DIAS }}
+
+  frontend:
+    name: Build estático do frontend
+    runs-on: ubuntu-latest
+    needs: versao
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/korp-web/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+        working-directory: frontend/korp-web
+
+      - name: Compilar
+        run: npm run build
+        working-directory: frontend/korp-web
+
+      # A configuração do nginx acompanha o build: é ela que faz o fallback de
+      # SPA funcionar no servidor.
+      - name: Preparar pacote
+        run: |
+          mkdir -p artefatos/frontend
+          cp -r frontend/korp-web/dist/korp-web/browser artefatos/frontend/html
+          cp frontend/korp-web/nginx.conf artefatos/frontend/nginx.conf
+
+      - name: Enviar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-${{ needs.versao.outputs.valor }}
+          path: artefatos/frontend
+          retention-days: ${{ env.RETENCAO_DIAS }}
+
+  imagens:
+    name: Imagens Docker
+    runs-on: ubuntu-latest
+    needs: versao
+    if: ${{ github.event_name == 'push' || inputs.incluir_imagens_docker }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construir as imagens
+        run: docker compose build
+
+      # docker save gera um tarball que pode ser levado ao servidor e carregado
+      # com "docker load" — sem precisar de um registry.
+      - name: Exportar as imagens
+        run: |
+          mkdir -p artefatos/imagens
+          for imagem in korp-inventory-service korp-billing-service korp-frontend; do
+            echo "Exportando $imagem..."
+            docker save "$imagem" | gzip > "artefatos/imagens/$imagem.tar.gz"
+          done
+          ls -lh artefatos/imagens
+
+      - name: Enviar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: imagens-docker-${{ needs.versao.outputs.valor }}
+          path: artefatos/imagens
+          retention-days: ${{ env.RETENCAO_DIAS }}
+
+  infraestrutura:
+    name: Arquivos de infraestrutura
+    runs-on: ubuntu-latest
+    needs: versao
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reunir arquivos
+        run: |
+          mkdir -p artefatos/infra
+          cp docker-compose.prod.yml artefatos/infra/docker-compose.yml
+          cp .env.example artefatos/infra/.env.example
+          cp -r db artefatos/infra/db
+          cp documentação/deploy/DEPLOY.md artefatos/infra/DEPLOY.md
+
+      - name: Enviar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: infraestrutura-${{ needs.versao.outputs.valor }}
+          path: artefatos/infra
+          retention-days: ${{ env.RETENCAO_DIAS }}
+
+  resumo:
+    name: Resumo
+    runs-on: ubuntu-latest
+    needs: [ versao, backend, migrations, frontend, infraestrutura ]
+    if: always()
+
+    steps:
+      - name: Escrever resumo
+        run: |
+          V="${{ needs.versao.outputs.valor }}"
+          {
+            echo "## Artefatos gerados — versão \`$V\`"
+            echo
+            echo "| Artefato | Conteúdo |"
+            echo "|---|---|"
+            echo "| \`InventoryService-$V\` | Binários publicados do microsserviço de estoque |"
+            echo "| \`BillingService-$V\` | Binários publicados do microsserviço de faturamento |"
+            echo "| \`migrations-$V\` | Scripts SQL idempotentes dos dois bancos |"
+            echo "| \`frontend-$V\` | Build estático do Angular + nginx.conf |"
+            echo "| \`imagens-docker-$V\` | Imagens Docker em tarball (\`docker load\`) |"
+            echo "| \`infraestrutura-$V\` | docker-compose de produção, .env de exemplo e guia de deploy |"
+            echo
+            echo "> Nenhum artefato foi publicado em registry ou servidor."
+            echo "> Instruções de instalação: \`documentação/deploy/DEPLOY.md\`."
+          } >> "$GITHUB_STEP_SUMMARY"

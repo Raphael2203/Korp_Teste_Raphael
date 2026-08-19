@@ -1,0 +1,91 @@
+.container {
+  max-width: 1000px;
+  margin: 32px auto;
+  padding: 0 20px 48px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  margin: 0 0 4px;
+}
+
+.page-header p {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+table {
+  width: 100%;
+}
+
+.numeric {
+  text-align: right;
+}
+
+.chip-open {
+  --mat-chip-elevated-container-color: var(--mat-sys-tertiary-container);
+}
+
+.chip-closed {
+  --mat-chip-elevated-container-color: var(--mat-sys-surface-variant);
+}
+
+.printing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.state {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.loading-box {
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  padding: 32px 40px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 320px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.loading-box h2 {
+  margin: 20px 0 8px;
+}
+
+.loading-box p {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+}

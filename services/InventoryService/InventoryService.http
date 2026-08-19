@@ -1,6 +1,43 @@
 @InventoryService_HostAddress = http://localhost:5159
 
-GET {{InventoryService_HostAddress}}/weatherforecast/
+### Health check
+GET {{InventoryService_HostAddress}}/health
+
+### Listar produtos
+GET {{InventoryService_HostAddress}}/api/Products
 Accept: application/json
 
-###
+### Consultar um produto
+GET {{InventoryService_HostAddress}}/api/Products/1
+Accept: application/json
+
+### Cadastrar produto
+POST {{InventoryService_HostAddress}}/api/Products
+Content-Type: application/json
+
+{
+  "code": "P-100",
+  "description": "Monitor 27 polegadas",
+  "stock": 10
+}
+
+### Baixa de estoque (atômica e idempotente)
+# Repetir com a mesma operationKey devolve "AlreadyApplied" sem debitar de novo.
+POST {{InventoryService_HostAddress}}/api/Products/stock/consume
+Content-Type: application/json
+
+{
+  "operationKey": "invoice-1",
+  "items": [
+    { "productId": 1, "quantity": 2 }
+  ]
+}
+
+### Sugestão de descrição por IA (opcional; 503 se ANTHROPIC_API_KEY não estiver definida)
+POST {{InventoryService_HostAddress}}/api/Products/description-suggestion
+Content-Type: application/json
+
+{
+  "code": "P-100",
+  "draft": "monitor 27 polegadas"
+}

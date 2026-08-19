@@ -1,0 +1,95 @@
+name: korp
+
+# Compose destinado a um servidor: consome imagens já construídas (carregadas
+# com `docker load` ou vindas de um registry) em vez de compilar no local, e lê
+# toda a configuração sensível do arquivo .env.
+#
+# Uso:
+#   cp .env.example .env    # e preencha os valores
+#   docker compose -f docker-compose.yml up -d
+#
+# Para o ambiente de desenvolvimento local, use o docker-compose.yml da raiz do
+# repositório, que constrói as imagens a partir do código.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: korp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Sem porta publicada: o banco fica acessível apenas na rede interna.
+
+  inventory-service:
+    image: korp-inventory-service:${KORP_VERSION:-latest}
+    container_name: korp-inventory
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__InventoryDatabase: "Host=postgres;Port=5432;Database=korp_inventory;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      # Em produção as migrations são aplicadas pelo script SQL antes do deploy.
+      Database__AutoMigrate: "${DATABASE_AUTO_MIGRATE:-false}"
+      Cors__AllowedOrigins__0: "${FRONTEND_ORIGIN}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+    ports:
+      - "${INVENTORY_PORT:-5159}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  billing-service:
+    image: korp-billing-service:${KORP_VERSION:-latest}
+    container_name: korp-billing
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__BillingDatabase: "Host=postgres;Port=5432;Database=korp_billing;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      Database__AutoMigrate: "${DATABASE_AUTO_MIGRATE:-false}"
+      Services__InventoryUrl: "http://inventory-service:8080"
+      Cors__AllowedOrigins__0: "${FRONTEND_ORIGIN}"
+    ports:
+      - "${BILLING_PORT:-5160}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    # ATENÇÃO: as URLs das APIs são compiladas dentro do bundle. A imagem
+    # precisa ter sido construída com os endereços do servidor:
+    #   docker build \
+    #     --build-arg INVENTORY_API_URL=https://estoque.seudominio.com \
+    #     --build-arg BILLING_API_URL=https://faturamento.seudominio.com \
+    #     -t korp-frontend:1.0.0 frontend/korp-web
+    image: korp-frontend:${KORP_VERSION:-latest}
+    container_name: korp-frontend
+    restart: unless-stopped
+    depends_on:
+      - inventory-service
+      - billing-service
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+
+volumes:
+  postgres-data:

@@ -1,0 +1,254 @@
+name: CI
+
+# Validação a cada push e pull request:
+#   qualidade  -> lint e formatação (backend e frontend)
+#   testes     -> executa a suíte quando existirem testes
+#   build      -> compila os dois microsserviços e o frontend
+#   stack      -> sobe o ambiente Docker completo e confere os health checks
+#
+# Nada é publicado em lugar nenhum.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  NODE_VERSION: '24.x'
+
+jobs:
+  # ──────────────────────────────── QUALIDADE ────────────────────────────────
+
+  qualidade-backend:
+    name: Qualidade — backend (.NET)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restaurar dependências
+        run: dotnet restore Korp.sln
+
+      # As migrations são geradas pelo EF Core e ficam fora da verificação.
+      - name: Verificar formatação (dotnet format)
+        run: dotnet format Korp.sln --verify-no-changes --exclude "**/Migrations/**"
+
+      - name: Compilar tratando avisos como erro
+        run: dotnet build Korp.sln --no-restore --configuration Release -warnaserror
+
+  qualidade-frontend:
+    name: Qualidade — frontend (Angular)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend/korp-web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/korp-web/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Lint (ESLint + regras do Angular)
+        run: npm run lint
+
+      - name: Verificar formatação (Prettier)
+        run: npm run format:check
+
+  # ───────────────────────────────── TESTES ──────────────────────────────────
+
+  testes-backend:
+    name: Testes — backend (.NET)
+    runs-on: ubuntu-latest
+    needs: qualidade-backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # Hoje a solution não tem projetos de teste e o comando encerra com
+      # sucesso sem executar nada. A etapa já fica pronta: ao adicionar um
+      # projeto *.Tests à solution, ele passa a rodar aqui automaticamente.
+      - name: Executar testes
+        run: dotnet test Korp.sln --configuration Release --logger "console;verbosity=normal"
+
+  testes-frontend:
+    name: Testes — frontend (Angular)
+    runs-on: ubuntu-latest
+    needs: qualidade-frontend
+
+    defaults:
+      run:
+        working-directory: frontend/korp-web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/korp-web/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # O runner do Angular falha quando não encontra nenhum arquivo de teste,
+      # então a etapa só executa a suíte se houver algo para rodar.
+      - name: Executar testes
+        run: |
+          if find src -name '*.spec.ts' -o -name '*.test.ts' | grep -q .; then
+            npm test -- --watch=false
+          else
+            echo "::notice::Nenhum arquivo de teste encontrado (*.spec.ts / *.test.ts) — etapa ignorada."
+          fi
+
+  # ────────────────────────────────── BUILD ──────────────────────────────────
+
+  build-backend:
+    name: Build — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: qualidade-backend
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [ InventoryService, BillingService ]
+
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restaurar dependências
+        run: dotnet restore
+
+      - name: Compilar
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Publicar (valida a saída usada no deploy)
+        run: dotnet publish --no-build --configuration Release --output ./publish
+
+  build-frontend:
+    name: Build — Angular
+    runs-on: ubuntu-latest
+    needs: qualidade-frontend
+
+    defaults:
+      run:
+        working-directory: frontend/korp-web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/korp-web/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Compilar
+        run: npm run build
+
+  migrations:
+    name: Migrations — script SQL
+    runs-on: ubuntu-latest
+    needs: qualidade-backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Instalar dotnet-ef
+        run: dotnet tool install --global dotnet-ef
+
+      # Além de produzir o SQL usado no deploy, gerar o script garante que as
+      # migrations continuam consistentes com o modelo do EF Core.
+      - name: Gerar script do InventoryService
+        run: dotnet ef migrations script --idempotent --output ../../migrations-inventory.sql
+        working-directory: services/InventoryService
+
+      - name: Gerar script do BillingService
+        run: dotnet ef migrations script --idempotent --output ../../migrations-billing.sql
+        working-directory: services/BillingService
+
+  # ────────────────────────────────── STACK ──────────────────────────────────
+
+  stack:
+    name: Stack Docker — subida e health check
+    runs-on: ubuntu-latest
+    needs: [ build-backend, build-frontend ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construir as imagens
+        run: docker compose build
+
+      - name: Subir a stack
+        run: docker compose up -d
+
+      - name: Aguardar os serviços ficarem saudáveis
+        run: |
+          for container in korp-postgres korp-inventory korp-billing; do
+            echo "Aguardando $container..."
+            timeout 180 bash -c \
+              "until [ \"\$(docker inspect -f '{{.State.Health.Status}}' $container)\" = healthy ]; do sleep 3; done"
+            echo "  $container OK"
+          done
+
+      - name: Verificar os endpoints
+        run: |
+          set -e
+          echo "InventoryService /health:"
+          curl -fsS http://localhost:5159/health
+          echo
+          echo "BillingService /health:"
+          curl -fsS http://localhost:5160/health
+          echo
+          echo "Frontend:"
+          curl -fsS -o /dev/null -w 'HTTP %{http_code}\n' http://localhost:4200
+
+      - name: Logs em caso de falha
+        if: failure()
+        run: docker compose logs --tail 200
+
+      - name: Derrubar a stack
+        if: always()
+        run: docker compose down -v
