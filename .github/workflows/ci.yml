@@ -195,11 +195,12 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Instalar dotnet-ef
-        run: dotnet tool install --global dotnet-ef
+      - name: Restaurar dependências
+        run: dotnet restore Korp.sln
 
-      # Além de produzir o SQL usado no deploy, gerar o script garante que as
-      # migrations continuam consistentes com o modelo do EF Core.
+      - name: Instalar dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 9.*
+
       - name: Gerar script do InventoryService
         run: dotnet ef migrations script --idempotent --output ../../migrations-inventory.sql
         working-directory: services/InventoryService

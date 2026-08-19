@@ -91,8 +91,24 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Restaurar dependências
+        run: dotnet restore Korp.sln
+
       - name: Instalar dotnet-ef
-        run: dotnet tool install --global dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 9.*
+
+      - name: Gerar scripts
+        run: |
+          mkdir -p artefatos/migrations
+          dotnet ef migrations script --idempotent \
+            --project services/InventoryService \
+            --output artefatos/migrations/korp_inventory.sql
+
+          dotnet ef migrations script --idempotent \
+            --project services/BillingService \
+            --output artefatos/migrations/korp_billing.sql
+
+          cp db/init/01-create-databases.sql artefatos/migrations/00-create-databases.sql
 
       # --idempotent gera um SQL que pode ser executado quantas vezes for
       # necessário: ele aplica apenas as migrations que ainda faltam. É o
